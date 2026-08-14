@@ -1,0 +1,43 @@
+appId: swmansion.enriched.markdown.example
+# Regression for programmatic focus jumping the caret to the document end on
+# Android. Capture/update goldens with:
+# yarn test:e2e:android:update-screenshots -- .maestro/enrichedMarkdownInput/flows/basic/block_elements/focus_preserves_selection_test.yaml
+tags:
+  - input
+  - android-only
+---
+- launchApp
+
+- runFlow:
+    file: '../../../../subflows/move_to_playground.yaml'
+
+- tapOn:
+    id: set-markdown-button
+
+- tapOn:
+    id: set-markdown-input
+
+- inputText: 'selectme tail'
+
+- tapOn:
+    id: set-markdown-confirm
+
+- tapOn:
+    id: focus-button
+
+- doubleTapOn:
+    text: 'selectme'
+
+- tapOn:
+    id: blur-button
+
+- tapOn:
+    id: focus-button
+
+- tapOn:
+    id: blur-button
+
+- runFlow:
+    file: '../../../subflows/capture_or_assert_screenshot.yaml'
+    env:
+      SCREENSHOT_NAME: 'focus_preserves_selection_input'
