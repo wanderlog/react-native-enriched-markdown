@@ -34,6 +34,8 @@
   ENRMInputFormatterStyle *copy = [[ENRMInputFormatterStyle allocWithZone:zone] init];
   copy.baseFont = _baseFont;
   copy.baseTextColor = _baseTextColor;
+  // Fixes iOS to properly handle the lineHeight style
+  copy.baseLineHeight = _baseLineHeight;
   copy.boldColor = _boldColor;
   copy.italicColor = _italicColor;
   copy.linkColor = _linkColor;
@@ -107,6 +109,23 @@
                                          : [_baseFont fontWithSize:size];
   _headingFontCache[level] = font;
   return font;
+}
+
+- (CGFloat)derivedLineHeightForHeadingLevel:(NSInteger)level
+{
+  if (_baseLineHeight <= 0 || ![self isValidHeadingLevel:level]) {
+    return 0;
+  }
+
+  CGFloat baseFontSize = _baseFont.pointSize;
+  CGFloat extra = _baseLineHeight - baseFontSize;
+
+  CGFloat headingFontSize = _headingFontSizes[level];
+  if (headingFontSize <= 0.0) {
+    headingFontSize = baseFontSize;
+  }
+
+  return headingFontSize + extra;
 }
 
 - (void)clearHeadingFontCache

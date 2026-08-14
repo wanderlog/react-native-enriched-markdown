@@ -2,6 +2,7 @@
 #import "ENRMBlockHandler.h"
 #import "ENRMBoldStyleHandler.h"
 #import "ENRMHeadingBlockHandler.h"
+#import "ENRMInputBlockType.h"
 #import "ENRMItalicStyleHandler.h"
 #import "ENRMLinkStyleHandler.h"
 #import "ENRMOrderedListBlockHandler.h"
@@ -10,6 +11,41 @@
 #import "ENRMStyleHandler.h"
 #import "ENRMUnderlineStyleHandler.h"
 #import "ENRMUnorderedListBlockHandler.h"
+#import "ParagraphStyleUtils.h"
+
+// Fixes iOS to properly handle the lineHeight style
+static void ENRMInputApplyBaseLineHeightToPlainParagraphs(NSTextStorage *textStorage, NSRange scopeRange,
+                                                          CGFloat lineHeight)
+{
+  if (lineHeight <= 0 || scopeRange.length == 0) {
+    return;
+  }
+
+  NSString *string = textStorage.string;
+  NSUInteger position = scopeRange.location;
+  NSUInteger scopeEnd = NSMaxRange(scopeRange);
+  while (position < scopeEnd) {
+    NSRange paragraphRange = [string paragraphRangeForRange:NSMakeRange(position, 0)];
+    paragraphRange = NSIntersectionRange(paragraphRange, scopeRange);
+    if (paragraphRange.length == 0) {
+      break;
+    }
+
+    id blockType = [textStorage attribute:ENRMBlockTypeAttributeName
+                                  atIndex:paragraphRange.location
+                           effectiveRange:NULL];
+    if (blockType == nil) {
+      applyLineHeight(textStorage, paragraphRange, lineHeight);
+      applyBaselineOffset(textStorage, paragraphRange);
+    }
+
+    NSUInteger nextPosition = NSMaxRange(paragraphRange);
+    if (nextPosition <= position) {
+      break;
+    }
+    position = nextPosition;
+  }
+}
 
 @implementation ENRMInputFormatter {
   NSDictionary<NSNumber *, id<ENRMStyleHandler>> *_styleHandlers;
@@ -148,6 +184,11 @@
 
   free(traitMap);
 
+  // Fixes iOS to properly handle the lineHeight style
+  if (style.baseLineHeight > 0) {
+    ENRMInputApplyBaseLineHeightToPlainParagraphs(textStorage, scopeRange, style.baseLineHeight);
+  }
+
   [textStorage endEditing];
 
   NSLayoutManager *layoutManager = textStorage.layoutManagers.firstObject;
@@ -256,6 +297,14 @@
 
     [handler applyAttributesToParagraphStyle:paragraphStyle attributes:attributes blockRange:blockRange style:style];
 
+    // Body line height on list blocks; headings get derived line height from the
+    // block handler.
+    NSInteger headingLevel = ENRMHeadingLevelForBlockType(blockRange.type);
+    if (style.baseLineHeight > 0 && headingLevel == 0) {
+      paragraphStyle.minimumLineHeight = style.baseLineHeight;
+      paragraphStyle.maximumLineHeight = style.baseLineHeight;
+    }
+
     attributes[NSParagraphStyleAttributeName] = paragraphStyle;
     attributes[ENRMBlockTypeAttributeName] = @(blockRange.type);
     attributes[ENRMBlockLevelAttributeName] = @(blockRange.level);
@@ -278,6 +327,9 @@
 
     if (applyRange.length > 0) {
       [textStorage addAttributes:attributes range:applyRange];
+      if (paragraphStyle.minimumLineHeight > 0) {
+        applyBaselineOffset(textStorage, applyRange);
+      }
     }
   }
 

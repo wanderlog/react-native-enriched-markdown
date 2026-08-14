@@ -20,6 +20,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)sanitizeURL:(NSString *)url;
 - (nullable ENRMFormattingRange *)linkAtPosition:(NSUInteger)position;
 
+/**
+ * For adding link destination to StyleState. Link at `position` for StyleState,
+ * including when the caret sits on NSMaxRange(link) (just past the last
+ * character). Ranges are half-open; on iOS the keyboard often snaps the caret
+ * to that end index.
+ */
+- (nullable ENRMFormattingRange *)linkAtPositionForStyleState:(NSUInteger)position;
+
 /// Sets a link on the selection range, or updates an existing link's URL at the cursor.
 /// Returns YES if a mutation occurred.
 - (BOOL)setLinkURL:(NSString *)url atCursor:(NSUInteger)cursor selection:(NSRange)selection;
