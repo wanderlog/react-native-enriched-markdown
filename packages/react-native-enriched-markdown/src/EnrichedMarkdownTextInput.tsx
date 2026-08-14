@@ -32,6 +32,7 @@ export type {
   OnEndMentionEvent,
 } from './EnrichedMarkdownTextInputNativeComponent';
 import type {
+  GestureResponderEvent,
   HostInstance,
   NativeSyntheticEvent,
   ViewProps,
@@ -39,6 +40,7 @@ import type {
   TextStyle,
   ColorValue,
 } from 'react-native';
+import { Platform, usePressability } from 'react-native';
 import { normalizeMarkdownTextInputStyle } from './normalizeMarkdownTextInputStyle';
 import { normalizeMenuItem } from './normalizeMenuItem';
 import { toNativeRegexConfig } from './utils/regexParser';
@@ -228,6 +230,17 @@ export interface EnrichedMarkdownTextInputProps extends Omit<
   onEndMention?: (event: OnEndMentionEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onPress?: (event: GestureResponderEvent) => unknown;
+  onPressIn?: (event: GestureResponderEvent) => unknown;
+  onPressOut?: (event: GestureResponderEvent) => unknown;
+  hitSlop?: ViewProps['hitSlop'];
+  /**
+   * When true (default), iOS resists parent scroll/press stealing the
+   * responder — same as React Native TextInput. See usePressability config
+   * (cancelable: !rejectResponderTermination):
+   * https://github.com/react/react-native/blob/v0.86.2/packages/react-native/Libraries/Components/TextInput/TextInput.js#L595-L597
+   */
+  rejectResponderTermination?: boolean;
   contextMenuItems?: ContextMenuItem[];
   /**
    * Controls built-in items in the text selection context menu.
@@ -306,6 +319,11 @@ export const EnrichedMarkdownTextInput = ({
   onEndMention,
   onFocus,
   onBlur,
+  onPress,
+  onPressIn,
+  onPressOut,
+  hitSlop,
+  rejectResponderTermination = true,
   contextMenuItems,
   selectionMenuConfig,
   formatMenuConfig,
@@ -536,6 +554,50 @@ export const EnrichedMarkdownTextInput = ({
     onBlur?.();
   }, [onBlur]);
 
+  /**
+   * React Native TextInput attaches usePressability to the native host so taps
+   * claim the JS touch responder and ancestor Pressable handlers do not also
+   * run. Without this, focusing the field still fires parent onPress (e.g.
+   * collapse on TripPlanNoteBlock).
+   * https://github.com/react/react-native/blob/v0.86.2/packages/react-native/Libraries/Components/TextInput/TextInput.js#L595-L629
+   */
+  const pressabilityConfig = useMemo(
+    () => ({
+      cancelable: Platform.OS === 'ios' ? !rejectResponderTermination : null,
+      hitSlop,
+      disabled: editable === false,
+      onPress: (event: GestureResponderEvent) => {
+        onPress?.(event);
+        if (editable !== false && nativeRef.current != null) {
+          Commands.focus(
+            nativeRef.current as Parameters<(typeof Commands)['focus']>[0]
+          );
+        }
+      },
+      onPressIn,
+      onPressOut,
+    }),
+    [
+      editable,
+      hitSlop,
+      onPress,
+      onPressIn,
+      onPressOut,
+      rejectResponderTermination,
+    ]
+  );
+
+  // React Native TextInput omits onBlur/onFocus from pressability; native
+  // events handle those:
+  // https://github.com/react/react-native/blob/v0.86.2/packages/react-native/Libraries/Components/TextInput/TextInput.js#L627-L629
+  /* eslint-disable @typescript-eslint/no-unused-vars -- omitted like RN TextInput */
+  const {
+    onBlur: _pressBlur,
+    onFocus: _pressFocus,
+    ...pressabilityHandlers
+  } = usePressability(pressabilityConfig);
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
   const handleRequestMarkdownResult = useCallback(
     (e: NativeSyntheticEvent<OnRequestMarkdownResultEvent>) => {
       const { requestId, markdown } = e.nativeEvent;
@@ -683,6 +745,7 @@ export const EnrichedMarkdownTextInput = ({
       onStartMention={handleStartMention as NativeProps['onStartMention']}
       onChangeMention={handleChangeMention as NativeProps['onChangeMention']}
       onEndMention={handleEndMention as NativeProps['onEndMention']}
+      {...pressabilityHandlers}
       {...rest}
     />
   );
