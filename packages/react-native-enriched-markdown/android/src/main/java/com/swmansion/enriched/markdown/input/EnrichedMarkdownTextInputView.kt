@@ -8,10 +8,12 @@ import android.graphics.Color
 import android.os.Build
 import android.text.Editable
 import android.text.InputType
+import android.text.Spannable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.View.OnFocusChangeListener
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -22,6 +24,7 @@ import com.facebook.react.uimanager.BackgroundStyleApplicator
 import com.facebook.react.uimanager.PixelUtil
 import com.facebook.react.uimanager.StateWrapper
 import com.facebook.react.views.text.ReactTypefaceUtils
+import com.facebook.react.views.text.TextAttributes
 import com.swmansion.enriched.markdown.input.autolink.AutoLinkDetector
 import com.swmansion.enriched.markdown.input.autolink.LinkRegexConfig
 import com.swmansion.enriched.markdown.input.detection.DetectorPipeline
@@ -45,6 +48,11 @@ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
 import com.swmansion.enriched.markdown.input.formatting.InputParser
 import com.swmansion.enriched.markdown.input.layout.InputEventEmitter
 import com.swmansion.enriched.markdown.input.layout.InputLayoutManager
+import com.swmansion.enriched.markdown.input.layout.InputTextStyleParams
+import com.swmansion.enriched.markdown.input.layout.applyBaseStyleSpans
+import com.swmansion.enriched.markdown.input.layout.applyBodyLineHeightToPlainParagraphs
+import com.swmansion.enriched.markdown.input.layout.copyTextAttributes
+import com.swmansion.enriched.markdown.input.layout.headingBlockRanges
 import com.swmansion.enriched.markdown.input.model.BlockRange
 import com.swmansion.enriched.markdown.input.model.BlockType
 import com.swmansion.enriched.markdown.input.model.FormattingRange
@@ -81,6 +89,8 @@ class EnrichedMarkdownTextInputView(
   private var typefaceDirty = false
   private var fontFamilyValue: String? = null
   private var fontWeightValue: Int = ReactConstants.UNSET
+  private val textAttributes = TextAttributes()
+  private var defaultTextColor: Int = Color.BLACK
 
   val contextMenu = InputContextMenu(this)
   val eventEmitter = InputEventEmitter(this)
@@ -167,6 +177,8 @@ class EnrichedMarkdownTextInputView(
 
     setEditableFactory(MarkdownEditableFactory(this))
     setPadding(0, 0, 0, 0)
+    // Line height is applied via CustomLineHeightSpan, not EditText.setLineSpacing.
+    setLineSpacing(0f, 1f)
     background = null
     BackgroundStyleApplicator.setBackgroundColor(this, Color.TRANSPARENT)
     contextMenu.install()
@@ -452,8 +464,10 @@ class EnrichedMarkdownTextInputView(
 
   fun applyFormatting() {
     val editable = text ?: return
+    formatter.bodyTextAttributes = copyTextAttributes(textAttributes)
     formatter.applyFormatting(editable, formattingStore.allRanges)
     formatter.applyBlockFormatting(editable, blockStore.allRanges)
+    reapplyBaseStyleSpans()
   }
 
   private fun applyFormattingAndEmit() {
@@ -780,6 +794,7 @@ class EnrichedMarkdownTextInputView(
     return blockCoordinator.headingLevelAtPosition(editable, selectionStart)
   }
 
+  // For adding link destination to StyleState
   fun linkDestinationAt(position: Int): String? = linkCoordinator.linkAtPositionForStyleState(position)?.url
 
   /**
@@ -951,13 +966,63 @@ class EnrichedMarkdownTextInputView(
 
   fun setFontSizeFromProps(size: Float) {
     if (size <= 0f) return
+    textAttributes.fontSize = size
     val sizePx = ceil(PixelUtil.toPixelFromSP(size))
     setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
+    reapplyBaseStyleSpans()
+    layoutManager.invalidateLayout()
+  }
+
+  fun setLineHeightFromProps(lineHeight: Float) {
+    // Lines overlapped on Android when lineHeight > fontSize because
+    // setLineSpacing(lineHeightSp - textSizePx) mixed SP with pixels
+    // (e.g. 24 - 48 = -24 on 3x). React Native stores lineHeight in SP on
+    // TextAttributes and applies CustomLineHeightSpan on the spannable instead:
+    // https://github.com/react/react-native/blob/v0.86.2/packages/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactEditText.kt#L332-L334
+    // https://github.com/react/react-native/blob/v0.86.2/packages/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactEditText.kt#L856-L858
+    textAttributes.lineHeight = if (lineHeight > 0f) lineHeight else Float.NaN
+    // Line height is span-based, not EditText extra spacing.
+    setLineSpacing(0f, 1f)
+    reapplyBaseStyleSpans()
     layoutManager.invalidateLayout()
   }
 
   fun setColorFromProps(colorInt: Int?) {
-    setTextColor(colorInt ?: Color.BLACK)
+    defaultTextColor = colorInt ?: Color.BLACK
+    setTextColor(defaultTextColor)
+    reapplyBaseStyleSpans()
+    layoutManager.invalidateLayout()
+  }
+
+  /** Read-only copy for Yoga measurement caching. */
+  fun textAttributesForMeasurement(): TextAttributes = copyTextAttributes(textAttributes)
+
+  internal fun styleParamsForMeasurement(): InputTextStyleParams =
+    InputTextStyleParams(
+      textAttributes = copyTextAttributes(textAttributes),
+      defaultColor = defaultTextColor,
+      fontStyle = ReactConstants.UNSET,
+      fontWeight = fontWeightValue,
+      fontFamily = fontFamilyValue,
+    )
+
+  /** Hint currently shown on screen; used when the buffer is empty for measure. */
+  fun hintForMeasurement(): CharSequence? = hint
+
+  private fun reapplyBaseStyleSpans() {
+    val editable = text ?: return
+    val styleParams = styleParamsForMeasurement()
+    applyBaseStyleSpans(
+      text = editable,
+      styleParams = styleParams,
+      assets = context.assets,
+      stripExisting = true,
+    )
+    applyBodyLineHeightToPlainParagraphs(
+      text = editable,
+      styleParams = styleParams,
+      headingBlockRanges = headingBlockRanges(blockStore.allRanges),
+    )
   }
 
   fun setCursorColorFromProps(colorInt: Int?) {
@@ -1001,6 +1066,7 @@ class EnrichedMarkdownTextInputView(
       )
     typeface = newTypeface
     paint.typeface = newTypeface
+    reapplyBaseStyleSpans()
     layoutManager.invalidateLayout()
   }
 
@@ -1008,10 +1074,21 @@ class EnrichedMarkdownTextInputView(
     AutoCapitalizeUtils.apply(this, flagName)
   }
 
-  fun requestFocusProgrammatically() {
-    requestFocus()
-    inputMethodManager?.showSoftInput(this, 0)
-    setSelection(selectionStart.coerceAtLeast(0))
+  /**
+   * Programmatic focus for autoFocus, ref.focus(), and the focus command from
+   * JS usePressability onPress (finger-up after long-press word select).
+   *
+   * Matches ReactEditText.requestFocusProgrammatically — request focus and show
+   * the keyboard without moving the selection, so a word range selected by
+   * long-press doesn't briefly flicker due to the selection collapsing:
+   * https://github.com/react/react-native/blob/v0.86.2/packages/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactEditText.kt#L396-L402
+   */
+  fun requestFocusProgrammatically(): Boolean {
+    val focused = super.requestFocus(FOCUS_DOWN, null)
+    if (isInTouchMode && showSoftInputOnFocus) {
+      inputMethodManager?.showSoftInput(this, 0)
+    }
+    return focused
   }
 
   private fun showAutoFocusKeyboardIfPending() {

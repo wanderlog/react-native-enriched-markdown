@@ -11,10 +11,17 @@ class InputLayoutManager(
   fun invalidateLayout() {
     if (view.stateWrapper == null) return
 
-    val text = view.text
-    val paint = view.paint
-
-    val needUpdate = InputMeasurementStore.store(view.id, text, paint)
+    val needUpdate =
+      InputMeasurementStore.store(
+        context = view.context,
+        id = view.id,
+        text = view.text,
+        styleParams = view.styleParamsForMeasurement(),
+        hint = view.hintForMeasurement(),
+        paint = view.paint,
+        blockRanges = view.blockStore.allRanges,
+        formatter = view.formatter,
+      )
     if (!needUpdate) return
 
     val state = Arguments.createMap()

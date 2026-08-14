@@ -1,5 +1,7 @@
 package com.swmansion.enriched.markdown.input.styles
 
+import com.facebook.react.views.text.TextAttributes
+import com.swmansion.enriched.markdown.input.layout.headingLineHeightPx
 import com.swmansion.enriched.markdown.input.model.BlockRange
 import com.swmansion.enriched.markdown.input.model.BlockType
 import com.swmansion.enriched.markdown.input.model.InputFormatterStyle
@@ -19,7 +21,13 @@ class HeadingBlockHandler : BlockHandler {
   override fun createSpans(
     blockRange: BlockRange,
     style: InputFormatterStyle,
-  ): List<Any> = listOf(InputHeadingSpan(blockRange.level, style))
+    bodyTextAttributes: TextAttributes,
+  ): List<Any> {
+    val headingStyle = style.headingStyle(blockRange.level)
+    val lineHeightPx =
+      headingLineHeightPx(bodyTextAttributes, headingStyle.fontSizePx)
+    return listOf(InputHeadingSpan(blockRange.level, style, lineHeightPx))
+  }
 
   override fun spanClasses(): List<Class<*>> = listOf(InputHeadingSpan::class.java)
 
