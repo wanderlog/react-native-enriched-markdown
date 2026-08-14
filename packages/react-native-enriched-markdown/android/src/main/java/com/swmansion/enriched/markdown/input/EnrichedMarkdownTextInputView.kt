@@ -780,6 +780,8 @@ class EnrichedMarkdownTextInputView(
     return blockCoordinator.headingLevelAtPosition(editable, selectionStart)
   }
 
+  fun linkDestinationAt(position: Int): String? = linkCoordinator.linkAtPositionForStyleState(position)?.url
+
   /**
    * On empty text with a heading block, overrides text size to the heading's
    * font size so the cursor matches heading height. Hides the hint while

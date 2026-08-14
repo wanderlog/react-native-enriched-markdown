@@ -61,6 +61,16 @@ function toHeadingLevel(n: number): HeadingLevel {
   return (VALID_HEADING_LEVELS.has(n) ? n : 1) as HeadingLevel;
 }
 
+function toStyleStateLink(link: {
+  isActive: boolean;
+  destination?: string;
+}): StyleStateLink {
+  if (link.isActive && link.destination != null && link.destination !== '') {
+    return { isActive: true, destination: link.destination };
+  }
+  return { isActive: false };
+}
+
 export interface HeadingStyle {
   fontSize?: number;
   fontWeight?: string;
@@ -102,13 +112,17 @@ export interface MarkdownTextInputStyle {
   };
 }
 
+export type StyleStateLink =
+  | { isActive: false }
+  | { isActive: true; destination: string };
+
 export interface StyleState {
   bold: { isActive: boolean };
   italic: { isActive: boolean };
   underline: { isActive: boolean };
   strikethrough: { isActive: boolean };
   spoiler: { isActive: boolean };
-  link: { isActive: boolean };
+  link: StyleStateLink;
   heading: { isActive: boolean; level: HeadingLevel };
   unorderedList: { isActive: boolean; depth: number };
   orderedList: { isActive: boolean; depth: number };
@@ -488,7 +502,7 @@ export const EnrichedMarkdownTextInput = ({
         underline,
         strikethrough,
         spoiler,
-        link,
+        link: toStyleStateLink(link),
         heading: { ...heading, level: toHeadingLevel(heading.level) },
         unorderedList,
         orderedList,
@@ -575,6 +589,7 @@ export const EnrichedMarkdownTextInput = ({
         selection: { start: selectionStart, end: selectionEnd },
         styleState: {
           ...styleState,
+          link: toStyleStateLink(styleState.link),
           heading: {
             ...styleState.heading,
             level: toHeadingLevel(styleState.heading.level),

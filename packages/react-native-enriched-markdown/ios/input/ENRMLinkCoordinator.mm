@@ -26,6 +26,24 @@
   return [_formattingStore rangeOfType:ENRMInputStyleTypeLink containingPosition:position];
 }
 
+- (nullable ENRMFormattingRange *)linkAtPositionForStyleState:(NSUInteger)position
+{
+  // For adding link destination to StyleState
+  ENRMFormattingRange *link = [self linkAtPosition:position];
+  if (link != nil) {
+    return link;
+  }
+  for (ENRMFormattingRange *formattingRange in _formattingStore.allRanges) {
+    if (formattingRange.type != ENRMInputStyleTypeLink) {
+      continue;
+    }
+    if (position == NSMaxRange(formattingRange.range)) {
+      return formattingRange;
+    }
+  }
+  return nil;
+}
+
 - (BOOL)setLinkURL:(NSString *)url atCursor:(NSUInteger)cursor selection:(NSRange)selection
 {
   ENRMFormattingRange *activeLink = [_formattingStore rangeOfType:ENRMInputStyleTypeLink containingPosition:cursor];

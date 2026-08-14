@@ -17,6 +17,18 @@ class LinkCoordinator(
 
   fun linkAtPosition(position: Int): FormattingRange? = formattingStore.rangeOfType(StyleType.LINK, position)
 
+  /**
+   * Link at [position] for StyleState, including when the caret sits on
+   * `range.end`. Ranges are half-open `[start, end)`; on iOS the keyboard
+   * often snaps the caret to the end index (just past the last character).
+   */
+  fun linkAtPositionForStyleState(position: Int): FormattingRange? {
+    formattingStore.rangeOfType(StyleType.LINK, position)?.let { return it }
+    return formattingStore.allRanges.firstOrNull {
+      it.type == StyleType.LINK && position == it.end
+    }
+  }
+
   fun setLinkForRange(
     url: String,
     start: Int,
