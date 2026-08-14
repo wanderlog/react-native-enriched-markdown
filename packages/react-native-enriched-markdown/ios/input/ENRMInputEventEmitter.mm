@@ -10,7 +10,8 @@ static EnrichedMarkdownTextInputEventEmitter::OnChangeState ENRMFabricChangeStat
       .underline = {.isActive = s.underline},
       .strikethrough = {.isActive = s.strikethrough},
       .spoiler = {.isActive = s.spoiler},
-      .link = {.isActive = s.link},
+      // For adding link destination to StyleState
+      .link = {.isActive = s.link, .destination = std::string([s.linkDestination UTF8String] ?: "")},
       .heading = {.isActive = s.headingLevel > 0, .level = static_cast<int>(s.headingLevel)},
       .unorderedList = {.isActive = s.unorderedList, .depth = static_cast<int>(s.unorderedList ? s.listDepth : 0)},
       .orderedList = {.isActive = s.orderedList, .depth = static_cast<int>(s.orderedList ? s.listDepth : 0)},
@@ -26,7 +27,8 @@ ENRMFabricContextMenuStyleState(ENRMInputStyleSnapshot s)
       .underline = {.isActive = s.underline},
       .strikethrough = {.isActive = s.strikethrough},
       .spoiler = {.isActive = s.spoiler},
-      .link = {.isActive = s.link},
+      // For adding link destination to StyleState
+      .link = {.isActive = s.link, .destination = std::string([s.linkDestination UTF8String] ?: "")},
       .heading = {.isActive = s.headingLevel > 0, .level = static_cast<int>(s.headingLevel)},
       .unorderedList = {.isActive = s.unorderedList, .depth = static_cast<int>(s.unorderedList ? s.listDepth : 0)},
       .orderedList = {.isActive = s.orderedList, .depth = static_cast<int>(s.orderedList ? s.listDepth : 0)},
@@ -44,6 +46,8 @@ ENRMFabricContextMenuStyleState(ENRMInputStyleSnapshot s)
 
   struct {
     BOOL bold, italic, underline, strikethrough, spoiler, link, initialized;
+    // For adding link destination to StyleState
+    __unsafe_unretained NSString *linkDestination;
     NSInteger headingLevel;
     BOOL unorderedList;
     NSInteger unorderedListDepth;
@@ -179,6 +183,7 @@ ENRMFabricContextMenuStyleState(ENRMInputStyleSnapshot s)
   if (_prevState.initialized && _prevState.bold == snapshot.bold && _prevState.italic == snapshot.italic &&
       _prevState.underline == snapshot.underline && _prevState.strikethrough == snapshot.strikethrough &&
       _prevState.spoiler == snapshot.spoiler && _prevState.link == snapshot.link &&
+      [_prevState.linkDestination isEqualToString:snapshot.linkDestination] &&
       _prevState.headingLevel == snapshot.headingLevel && _prevState.unorderedList == snapshot.unorderedList &&
       _prevState.unorderedListDepth == snapshot.listDepth && _prevState.orderedList == snapshot.orderedList &&
       _prevState.orderedListDepth == snapshot.listDepth) {
@@ -191,6 +196,7 @@ ENRMFabricContextMenuStyleState(ENRMInputStyleSnapshot s)
   _prevState.strikethrough = snapshot.strikethrough;
   _prevState.spoiler = snapshot.spoiler;
   _prevState.link = snapshot.link;
+  _prevState.linkDestination = snapshot.linkDestination;
   _prevState.headingLevel = snapshot.headingLevel;
   _prevState.unorderedList = snapshot.unorderedList;
   _prevState.unorderedListDepth = snapshot.listDepth;

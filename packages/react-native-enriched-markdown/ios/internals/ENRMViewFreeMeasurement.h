@@ -127,7 +127,7 @@ static inline StyleConfig *ENRMStyleConfigFromProps(const PropsT &typedProps, CG
  */
 static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text, CGFloat maxWidth, StyleConfig *config,
                                                        BOOL allowTrailingMargin, CGFloat lastElementMarginBottom,
-                                                       CGFloat pointScaleFactor)
+                                                       CGFloat pointScaleFactor, BOOL subtractExtraLineFragment)
 {
   if (text.length == 0) {
     return CGSizeZero;
@@ -148,7 +148,7 @@ static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text,
   layout.extraLineFragmentRect = layoutManager.extraLineFragmentRect;
 
   return ENRMFinalizeMeasuredTextSize(layout, layoutManager, text, maxWidth, config, allowTrailingMargin,
-                                      lastElementMarginBottom, pointScaleFactor);
+                                      lastElementMarginBottom, subtractExtraLineFragment, pointScaleFactor);
 }
 
 /**
@@ -193,7 +193,7 @@ static inline CGSize ENRMMeasureMarkdownViewFree(const PropsT &typedProps, CGFlo
     ENRMApplyWritingDirectionMode(text, writingDirectionMode, resolvedLayoutDirection);
 
     CGSize size = ENRMMeasureAttributedTextViewFree(text, maxWidth, config, typedProps.allowTrailingMargin,
-                                                    result.lastElementMarginBottom, pointScaleFactor);
+                                                    result.lastElementMarginBottom, pointScaleFactor, YES);
     if (size.height == 0) {
       return fallback;
     }
@@ -232,12 +232,7 @@ static inline CGSize ENRMMeasureSegmentedMarkdownViewFree(const PropsT &typedPro
       NSString *tableModeStr = [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.tableMode.c_str()];
       ENRMTableStreamingMode tableStreamingMode =
           [tableModeStr isEqualToString:@"hidden"] ? ENRMTableStreamingModeHidden : ENRMTableStreamingModeProgressive;
-      NSString *codeBlockModeStr =
-          [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.codeBlockMode.c_str()];
-      ENRMCodeBlockStreamingMode codeBlockStreamingMode = [codeBlockModeStr isEqualToString:@"hidden"]
-                                                              ? ENRMCodeBlockStreamingModeHidden
-                                                              : ENRMCodeBlockStreamingModeProgressive;
-      markdown = ENRMRenderableMarkdownForStreaming(markdown, tableStreamingMode, codeBlockStreamingMode, NULL);
+      markdown = ENRMRenderableMarkdownForStreaming(markdown, tableStreamingMode);
       if (markdown.length == 0) {
         return fallback;
       }
@@ -282,7 +277,7 @@ static inline CGSize ENRMMeasureSegmentedMarkdownViewFree(const PropsT &typedPro
       if (segment.kind == ENRMSegmentKindText && segment.textResult) {
         CGSize textSize = ENRMMeasureAttributedTextViewFree(
             segment.textResult.attributedText, maxWidth, config, shouldAddBottomMargin,
-            segment.textResult.lastElementMarginBottom, pointScaleFactor);
+            segment.textResult.lastElementMarginBottom, pointScaleFactor, YES);
         yOffset += textSize.height;
         maxContentWidth = MAX(maxContentWidth, textSize.width);
       } else if (segment.kind == ENRMSegmentKindTable && segment.tableSegment) {

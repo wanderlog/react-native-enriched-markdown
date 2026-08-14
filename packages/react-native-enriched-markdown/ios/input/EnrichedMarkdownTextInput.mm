@@ -24,11 +24,13 @@
 #import "ENRMStyleHandler.h"
 #import "ENRMStyleMergingConfig.h"
 #import "ENRMUIKit.h"
+#import "ENRMViewFreeMeasurement.h"
 #import "EnrichedMarkdownTextInput+Internal.h"
 #import "InputStylePropsUtils.h"
 #import "ParagraphStyleUtils.h"
 #import "PasteboardUtils.h"
 #import "SelectionColorUtils.h"
+#import "StyleConfig.h"
 #import <QuartzCore/CABase.h>
 #import <React/RCTI18nUtil.h>
 #if TARGET_OS_OSX
@@ -214,6 +216,19 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
 {
 #if !TARGET_OS_OSX
   _layoutManager = [[ENRMInputLayoutManager alloc] init];
+  // Align TextKit line spacing with React Native Text and TextInput so this
+  // field renders and measures consistently with the rest of the app.
+  //
+  // TextKit NSLayoutManager defaults to usesFontLeading=YES, which stacks
+  // each font's built-in vertical leading on top of paragraph lineHeight.
+  // React Native disables that for Text measurement/layout:
+  // https://github.com/react/react-native/blob/v0.86.2/packages/react-native/ReactCommon/react/renderer/textlayoutmanager/platform/ios/react/renderer/textlayoutmanager/RCTTextLayoutManager.mm#L237
+  // ENRMMeasureAttributedTextViewFree (-measureSize: below) also passes NO.
+  // Set it on _layoutManager so the visible UITextView matches both.
+  //
+  // If they differ, reported height and on-screen layout drift apart — e.g.
+  // extra bottom space with fonts that carry nonzero leading (Geeza Pro).
+  _layoutManager.usesFontLeading = NO;
   NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:CGSizeMake(0, CGFLOAT_MAX)];
   textContainer.widthTracksTextView = YES;
   [_layoutManager addTextContainer:textContainer];
@@ -225,6 +240,9 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
 #else
   ENRMInputTextView *inputTextView = [[ENRMInputTextView alloc] initWithFrame:CGRectZero];
   _layoutManager = [[ENRMInputLayoutManager alloc] init];
+  // Same usesFontLeading=NO as the iOS setupTextView path — see comment
+  // there for why we want to have the same logic as React Native's TextInput.
+  _layoutManager.usesFontLeading = NO;
   [inputTextView.textContainer replaceLayoutManager:_layoutManager];
 #endif
   inputTextView.markdownTextInput = self;
@@ -353,22 +371,10 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
                                                                          attributes:_textView.typingAttributes]];
   }
 
-  // Trailing newlines are not counted by boundingRectWithSize — append
-  // a mock character so the extra line is included in the height.
-  if (measuredText.length > 0) {
-    unichar lastChar = [measuredText.string characterAtIndex:measuredText.length - 1];
-    if ([[NSCharacterSet newlineCharacterSet] characterIsMember:lastChar]) {
-      [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
-                                                                           attributes:_textView.typingAttributes]];
-    }
-  }
-
-  CGRect boundingBox =
-      [measuredText boundingRectWithSize:CGSizeMake(maxWidth, CGFLOAT_MAX)
-                                 options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-                                 context:nil];
-
-  return CGSizeMake(maxWidth, ceil(boundingBox.size.height));
+  // Measure input height with TextKit to match RN Text layout.
+  StyleConfig *config = [[StyleConfig alloc] init];
+  CGSize size = ENRMMeasureAttributedTextViewFree(measuredText, maxWidth, config, NO, 0, RCTScreenScale(), NO);
+  return CGSizeMake(maxWidth, size.height);
 }
 
 #pragma mark - Props
@@ -666,6 +672,10 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
   [_editSession enterPhase:ENRMEditPhaseImporting];
 
   [_editSession enterPhase:ENRMEditPhaseFormatting];
+  // UITextView stamps typingAttributes (including list headIndent from the
+  // previous cursor) onto all text set via .text. Reset before import so
+  // setValue does not indent non-list lines with the old list depth.
+  [self resetBaseTypingAttributes];
   ENRMSetPlainText(_textView, parsed.plainText);
   [_editSession enterPhase:ENRMEditPhaseImporting];
 
@@ -789,10 +799,15 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
 
 - (void)resetBaseTypingAttributes
 {
-  ENRMSetDefaultTypingAttributes(_textView, @{
+  NSMutableDictionary *attrs = [@{
     NSFontAttributeName : _formatterStyle.baseFont,
     NSForegroundColorAttributeName : _formatterStyle.baseTextColor,
-  });
+  } mutableCopy];
+  // Fixes iOS to properly handle the lineHeight style
+  if (_formatterStyle.baseLineHeight > 0) {
+    attrs[NSParagraphStyleAttributeName] = ENRMInputParagraphStyleWithLineHeight(_formatterStyle, nil);
+  }
+  ENRMSetDefaultTypingAttributes(_textView, attrs);
 }
 
 - (void)applyFormatting
@@ -1456,6 +1471,12 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
 - (BOOL)isEffectiveStyleActive:(ENRMInputStyleType)type atPosition:(NSUInteger)position
 {
   return [_typingController isEffectiveStyleActive:type atPosition:position];
+}
+
+// For adding link destination to StyleState
+- (NSString *)linkURLAtPosition:(NSUInteger)position
+{
+  return [_linkCoordinator linkAtPositionForStyleState:position].url ?: @"";
 }
 
 #pragma mark - ENRMInputTypingAttributesDataSource
