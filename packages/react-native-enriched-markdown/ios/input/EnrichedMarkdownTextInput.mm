@@ -1458,6 +1458,11 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
   return [_typingController isEffectiveStyleActive:type atPosition:position];
 }
 
+- (NSString *)linkURLAtPosition:(NSUInteger)position
+{
+  return [_linkCoordinator linkAtPositionForStyleState:position].url ?: @"";
+}
+
 #pragma mark - ENRMInputTypingAttributesDataSource
 
 - (BOOL)isStyleAdjacentBefore:(ENRMInputStyleType)type position:(NSUInteger)position

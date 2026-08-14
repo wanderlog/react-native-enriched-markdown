@@ -13,6 +13,8 @@ typedef struct {
   BOOL strikethrough;
   BOOL spoiler;
   BOOL link;
+  // For adding link destination to StyleState
+  __unsafe_unretained NSString *linkDestination;
   NSInteger headingLevel;
   BOOL unorderedList;
   BOOL orderedList;
@@ -26,6 +28,8 @@ typedef struct {
 - (BOOL)isStyleActive:(ENRMInputStyleType)type inRange:(NSRange)range;
 - (NSInteger)headingLevelForCursorParagraph;
 - (nullable ENRMBlockRange *)listBlockForCursorParagraph;
+// For adding link destination to StyleState
+- (NSString *)linkURLAtPosition:(NSUInteger)position;
 
 @end
 
