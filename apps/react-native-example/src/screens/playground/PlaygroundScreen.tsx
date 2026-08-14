@@ -21,6 +21,7 @@ import {
   type StyleState,
 } from 'react-native-enriched-markdown';
 import { FormattingToolbar } from '../../components/FormattingToolbar';
+import { StyleStateDebugPanel } from '../../components/StyleStateDebugPanel';
 
 const MARKDOWN_STYLE = {
   link: { color: '#2563EB', underline: true as const },
@@ -205,6 +206,8 @@ export default function PlaygroundScreen() {
             testID="formatting-toolbar"
           />
         </View>
+
+        <StyleStateDebugPanel state={state} />
 
         <TouchableOpacity
           style={styles.getMarkdownButton}
